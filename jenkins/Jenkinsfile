@@ -1,0 +1,78 @@
+pipeline {
+    agent any
+
+    environment {
+        AWS_REGION = 'us-east-2'
+        CLUSTER_NAME = 'online-boutique-cluster'
+        MANIFEST_PATH = 'app/release/kubernetes-manifests.yaml'
+    }
+
+    stages {
+        stage('Checkout Code') {
+            steps {
+                checkout scm
+            }
+        }
+
+        stage('Verify Tools') {
+            steps {
+                sh '''
+                echo "Checking required tools..."
+                aws --version
+                kubectl version --client
+                '''
+            }
+        }
+
+        stage('Connect to EKS') {
+            steps {
+                sh '''
+                aws eks update-kubeconfig --region $AWS_REGION --name $CLUSTER_NAME
+                kubectl get nodes
+                '''
+            }
+        }
+
+        stage('Deploy Online Boutique') {
+            steps {
+                sh '''
+                kubectl apply -f $MANIFEST_PATH
+                '''
+            }
+        }
+
+        stage('Verify Pods') {
+            steps {
+                sh '''
+                kubectl get pods
+                '''
+            }
+        }
+
+        stage('Verify Frontend Rollout') {
+            steps {
+                sh '''
+                kubectl rollout status deployment/frontend --timeout=180s
+                '''
+            }
+        }
+
+        stage('Show Services') {
+            steps {
+                sh '''
+                kubectl get svc
+                '''
+            }
+        }
+    }
+
+    post {
+        success {
+            echo 'Deployment to EKS completed successfully.'
+        }
+
+        failure {
+            echo 'Deployment failed. Check Jenkins console logs.'
+        }
+    }
+}
